@@ -1,0 +1,747 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import api from '../api';
+import { clearStorage } from '../helper';
+
+const EmployeeDashboard = () => {
+    const [leaveBalance, setLeaveBalance] = useState(20);
+    const [leaves, setLeaves] = useState([]);
+    const [attendances, setAttendances] = useState([]);
+    const [showApplyLeave, setShowApplyLeave] = useState(false);
+    const [leaveType, setLeaveType] = useState('Casual');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const [reason, setReason] = useState('');
+    const [activeTab, setActiveTab] = useState('overview');
+    const [leaveFilter, setLeaveFilter] = useState('all');
+    const [loading, setLoading] = useState(false);
+    const [editingLeave, setEditingLeave] = useState(null);
+    const [editLeaveType, setEditLeaveType] = useState('Casual');
+    const [editStartDate, setEditStartDate] = useState('');
+    const [editEndDate, setEditEndDate] = useState('');
+    const [editReason, setEditReason] = useState('');
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        fetchData();
+    }, []);
+
+    const fetchData = async () => {
+        setLoading(true);
+        try {
+            const balanceRes = await api.post('/leave/balance', {});
+            setLeaveBalance(balanceRes.data.balance);
+
+            const leavesRes = await api.post('/leave/history', {});
+            setLeaves(leavesRes.data);
+
+            const attRes = await api.post('/attendance/history', {});
+            setAttendances(attRes.data);
+        } catch (error) {
+            console.error('Fetch data error:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleApplyLeave = async (e) => {
+        e.preventDefault();
+        if (!startDate || !endDate) {
+            alert('Please select both start and end dates');
+            return;
+        }
+
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+
+        if (start > end) {
+            alert('End date must be after start date');
+            return;
+        }
+
+        const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+        if (totalDays > leaveBalance) {
+            alert(`You only have ${leaveBalance} days left. Cannot apply for ${totalDays} days.`);
+            return;
+        }
+
+        try {
+            await api.post('/leave/apply', { leaveType, startDate, endDate, totalDays, reason });
+            alert('Leave applied successfully');
+            setShowApplyLeave(false);
+            setStartDate('');
+            setEndDate('');
+            setReason('');
+            setLeaveType('Casual');
+            fetchData();
+        } catch (error) {
+            console.error('Apply leave error:', error);
+            alert(error.response?.data?.message || 'Apply leave failed');
+        }
+    };
+    
+const handleMarkAttendance = async (status) => {
+    if (loading || markedToday) return;
+
+    setLoading(true);
+
+    try {
+        // ✅ Backend ab khud date lega, frontend sirf status bhejega
+        const res = await api.post('/attendance/mark', { status });
+
+        // Response me message already handle ho raha hai (newly marked / already marked)
+        alert(res.data.message);
+
+        // Refresh data
+        fetchData();
+    } catch (error) {
+        console.error('Mark attendance error:', {
+            status: error.response?.status,
+            data: error.response?.data,
+            message: error.message
+        });
+        alert(error.response?.data?.message || error.message || "Error");
+    } finally {
+        setLoading(false);
+    }
+};
+
+const handleLogout = () => {
+        clearStorage();
+        navigate('/login');
+    };
+
+    const handleEditLeave = (leave) => {
+        setEditingLeave(leave);
+        setEditLeaveType(leave.leaveType);
+        setEditStartDate(leave.startDate.split('T')[0]); // Extract date part
+        setEditEndDate(leave.endDate.split('T')[0]); // Extract date part
+        setEditReason(leave.reason || '');
+    };
+
+    const handleCancelEdit = () => {
+        setEditingLeave(null);
+        setEditLeaveType('Casual');
+        setEditStartDate('');
+        setEditEndDate('');
+        setEditReason('');
+    };
+
+    const handleUpdateLeave = async (e) => {
+        e.preventDefault();
+        if (!editStartDate || !editEndDate) {
+            alert('Please select both start and end dates');
+            return;
+        }
+
+        const start = new Date(editStartDate);
+        const end = new Date(editEndDate);
+
+        if (start > end) {
+            alert('End date must be after start date');
+            return;
+        }
+
+        const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+        if (totalDays > leaveBalance) {
+            alert(`You only have ${leaveBalance} days left. Cannot update to ${totalDays} days.`);
+            return;
+        }
+
+        try {
+            await api.put(`/leave/${editingLeave._id}`, {
+                leaveType: editLeaveType,
+                startDate: editStartDate,
+                endDate: editEndDate,
+                totalDays,
+                reason: editReason
+            });
+            alert('Leave updated successfully');
+            handleCancelEdit();
+            fetchData();
+        } catch (error) {
+            console.error('Update leave error:', error);
+            alert(error.response?.data?.message || 'Update leave failed');
+        }
+    };
+
+    const handleCancelLeave = async (leaveId) => {
+        if (!confirm('Are you sure you want to cancel this leave request?')) {
+            return;
+        }
+
+        try {
+            await api.delete(`/leave/${leaveId}`);
+            alert('Leave cancelled successfully');
+            fetchData();
+        } catch (error) {
+            console.error('Cancel leave error:', error);
+            alert(error.response?.data?.message || 'Cancel leave failed');
+        }
+    };
+
+    // Statistics
+    const pendingLeaves = leaves.filter(l => l.status === 'Pending').length;
+    const approvedLeaves = leaves.filter(l => l.status === 'Approved').length;
+    const totalAttendance = attendances.length;
+    const presentDays = attendances.filter(a => a.status === 'Present').length;
+
+    // Filtered leaves
+    const filteredLeaves = leaves.filter(leave => {
+        if (leaveFilter === 'all') return true;
+        return leave.status === leaveFilter;
+    });
+
+    // Check if already marked attendance today
+ const today = new Date();
+today.setHours(0, 0, 0, 0);
+
+const markedToday = attendances.some(att => {
+    const attDate = new Date(att.date);
+    attDate.setHours(0, 0, 0, 0);
+    return attDate.getTime() === today.getTime();
+});
+    return (
+        <div className="min-h-screen bg-gray-100">
+            {/* Header */}
+            <header className="bg-white/90 backdrop-blur shadow sticky top-0 z-50 animate-fade-up">
+                <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+                    <div>
+                        <h1 className="text-3xl font-bold text-gray-900">Employee Dashboard</h1>
+                        <p className="text-sm text-gray-500 mt-1">Track leaves, attendance & manage requests</p>
+                    </div>
+                    <button
+                        onClick={handleLogout}
+                        className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded transition shadow hover:shadow-lg"
+                    >
+                        Logout
+                    </button>
+                </div>
+            </header>
+
+            <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+                <div className="px-4 py-6 sm:px-0">
+                    {/* Statistics Cards */}
+                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+                        <div className="card bg-indigo-50 border-l-4 border-indigo-500 animate-fade-up animate-stagger-1 hover-lift">
+                            <div className="p-5">
+                                <div className="flex items-center">
+                                    <div className="flex-shrink-0">
+                                        <div className="flex items-center justify-center h-12 w-12 rounded-md bg-indigo-500 text-white text-xl">📅</div>
+                                    </div>
+                                    <div className="ml-5 w-0 flex-1">
+                                        <dt className="text-sm font-medium text-gray-600">Leave Balance</dt>
+                                        <dd className="text-3xl font-bold text-indigo-600 mt-1">{leaveBalance}</dd>
+                                        <p className="text-xs text-gray-500 mt-1">days remaining</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="card bg-yellow-50 border-l-4 border-yellow-500 animate-fade-up animate-stagger-3 hover-lift">
+                            <div className="p-5">
+                                <div className="flex items-center">
+                                    <div className="flex-shrink-0">
+                                        <div className="flex items-center justify-center h-12 w-12 rounded-md bg-yellow-500 text-white text-xl">⏳</div>
+                                    </div>
+                                    <div className="ml-5 w-0 flex-1">
+                                        <dt className="text-sm font-medium text-gray-600">Pending Leaves</dt>
+                                        <dd className="text-3xl font-bold text-yellow-600 mt-1">{pendingLeaves}</dd>
+                                        <p className="text-xs text-gray-500 mt-1">awaiting approval</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="card bg-green-50 border-l-4 border-green-500 animate-fade-up animate-stagger-2 hover-lift">
+                            <div className="p-5">
+                                <div className="flex items-center">
+                                    <div className="flex-shrink-0">
+                                        <div className="flex items-center justify-center h-12 w-12 rounded-md bg-green-500 text-white text-xl">✓</div>
+                                    </div>
+                                    <div className="ml-5 w-0 flex-1">
+                                        <dt className="text-sm font-medium text-gray-600">Approved Leaves</dt>
+                                        <dd className="text-3xl font-bold text-green-600 mt-1">{approvedLeaves}</dd>
+                                        <p className="text-xs text-gray-500 mt-1">confirmed</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="card bg-purple-50 border-l-4 border-purple-500 animate-fade-up animate-stagger-4 hover-lift">
+                            <div className="p-5">
+                                <div className="flex items-center">
+                                    <div className="flex-shrink-0">
+                                        <div className="flex items-center justify-center h-12 w-12 rounded-md bg-purple-500 text-white text-xl">📊</div>
+                                    </div>
+                                    <div className="ml-5 w-0 flex-1">
+                                        <dt className="text-sm font-medium text-gray-600">Present Days</dt>
+                                        <dd className="text-3xl font-bold text-purple-600 mt-1">{presentDays}</dd>
+                                        <p className="text-xs text-gray-500 mt-1">out of {totalAttendance}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Tabs */}
+                    <div className="border-b border-gray-200 mb-6 bg-white rounded-t-lg">
+                        <div className="flex space-x-8 px-6">
+                            {['overview', 'leaves', 'attendance', 'apply'].map(tab => (
+                                <button
+                                    key={tab}
+                                    onClick={() => setActiveTab(tab)}
+                                    className={`py-4 px-1 border-b-2 font-medium text-sm transition ${activeTab === tab
+                                        ? 'border-indigo-500 text-indigo-600'
+                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        }`}
+                                >
+                                    {tab === 'overview' && '📈 Overview'}
+                                    {tab === 'leaves' && '🏝️ Leaves'}
+                                    {tab === 'attendance' && '📍 Attendance'}
+                                    {tab === 'apply' && '➕ Apply Leave'}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Overview Tab */}
+                    {activeTab === 'overview' && (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {/* Attendance Check-in Card */}
+                            <div className="card animate-fade-up hover-lift">
+                                <div className="card-header bg-gradient-to-r from-green-50 to-blue-50 border-b">
+                                    <h3 className="text-lg font-semibold">Mark Today's Attendance</h3>
+                                </div>
+                                <div className="card-body">
+                                    <p className="text-gray-600 mb-4">
+                                        {markedToday ? (
+                                            <span className="text-green-600 font-semibold">✓ You've already marked attendance today</span>
+                                        ) : (
+                                            <span>Mark your attendance for today</span>
+                                        )}
+                                    </p>
+                                    <div className="flex space-x-3">
+                                        <button
+                                            onClick={() => handleMarkAttendance('Present')}
+                                            disabled={markedToday || loading}
+                                            className={`flex-1 py-3 px-4 rounded-lg font-semibold transition ${markedToday
+                                                ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                                                : 'bg-green-500 hover:bg-green-600 text-white shadow hover:shadow-lg'
+                                                }`}
+                                        >
+                                            {loading ? "Processing..." : "✓ Present"}
+                                        </button>
+                                        <button
+                                            onClick={() => handleMarkAttendance('Absent')}
+                                            disabled={markedToday || loading}
+                                            className={`flex-1 py-3 px-4 rounded-lg font-semibold transition ${markedToday
+                                                ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                                                : 'bg-red-500 hover:bg-red-600 text-white shadow hover:shadow-lg'
+                                                }`}
+                                        >
+                                            {loading ? "Processing..." : "✕ Absent"}                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Quick Stats */}
+                            <div className="card animate-fade-up animate-stagger-2 hover-lift">
+                                <div className="card-header bg-gradient-to-r from-orange-50 to-yellow-50 border-b">
+                                    <h3 className="text-lg font-semibold">Quick Summary</h3>
+                                </div>
+                                <div className="card-body space-y-3">
+                                    <div className="flex justify-between items-center p-3 bg-indigo-50 rounded-lg hover:shadow transition">
+                                        <span className="text-gray-700 font-medium">Leave Balance</span>
+                                        <span className="text-2xl font-bold text-indigo-600">{leaveBalance}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center p-3 bg-yellow-50 rounded-lg hover:shadow transition">
+                                        <span className="text-gray-700 font-medium">Pending Requests</span>
+                                        <span className="text-2xl font-bold text-yellow-600">{pendingLeaves}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg hover:shadow transition">
+                                        <span className="text-gray-700 font-medium">Total Present</span>
+                                        <span className="text-2xl font-bold text-green-600">{presentDays}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Recent Leaves */}
+                            <div className="lg:col-span-2 card">
+                                <div className="card-header bg-gradient-to-r from-pink-50 to-red-50 border-b">
+                                    <h3 className="text-lg font-semibold">Recent Leave Requests</h3>
+                                </div>
+                                <div className="card-body">
+                                    {filteredLeaves.slice(0, 5).length > 0 ? (
+                                        <div className="space-y-3">
+                                            {filteredLeaves.slice(0, 5).map(leave => (
+                                                <div key={leave._id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition">
+                                                    <div className="flex-1">
+                                                        <p className="text-sm font-semibold text-gray-900">{leave.leaveType} Leave</p>
+                                                        <p className="text-xs text-gray-600">
+                                                            {new Date(leave.startDate).toLocaleDateString()} - {new Date(leave.endDate).toLocaleDateString()} ({leave.totalDays} days)
+                                                        </p>
+                                                    </div>
+                                                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${leave.status === 'Pending'
+                                                        ? 'bg-yellow-100 text-yellow-800'
+                                                        : leave.status === 'Approved'
+                                                            ? 'bg-green-100 text-green-800'
+                                                            : 'bg-red-100 text-red-800'
+                                                        }`}>
+                                                        {leave.status}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-center text-gray-500 py-4">No leave requests yet</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Leaves Tab */}
+                    {activeTab === 'leaves' && (
+                        <div className="space-y-6">
+                            {/* Edit Leave Form */}
+                            {editingLeave && (
+                                <div className="card">
+                                    <div className="card-header bg-gradient-to-r from-yellow-50 to-orange-50 border-b">
+                                        <h3 className="text-lg font-semibold">Edit Leave Request</h3>
+                                        <p className="text-sm text-gray-600 mt-1">Update your leave details</p>
+                                    </div>
+                                    <div className="card-body">
+                                        <form onSubmit={handleUpdateLeave} className="max-w-2xl">
+                                            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                                                <div>
+                                                    <label htmlFor="editLeaveType" className="block text-sm font-semibold text-gray-700 mb-2">
+                                                        Leave Type <span className="text-red-500">*</span>
+                                                    </label>
+                                                    <select
+                                                        id="editLeaveType"
+                                                        value={editLeaveType}
+                                                        onChange={(e) => setEditLeaveType(e.target.value)}
+                                                        className="input-field w-full"
+                                                    >
+                                                        <option value="Casual">Casual Leave</option>
+                                                        <option value="Sick">Sick Leave</option>
+                                                        <option value="Paid">Paid Leave</option>
+                                                    </select>
+                                                </div>
+
+                                                <div>
+                                                    <label htmlFor="editStartDate" className="block text-sm font-semibold text-gray-700 mb-2">
+                                                        Start Date <span className="text-red-500">*</span>
+                                                    </label>
+                                                    <input
+                                                        type="date"
+                                                        id="editStartDate"
+                                                        value={editStartDate}
+                                                        onChange={(e) => setEditStartDate(e.target.value)}
+                                                        className="input-field w-full"
+                                                        required
+                                                    />
+                                                </div>
+
+                                                <div>
+                                                    <label htmlFor="editEndDate" className="block text-sm font-semibold text-gray-700 mb-2">
+                                                        End Date <span className="text-red-500">*</span>
+                                                    </label>
+                                                    <input
+                                                        type="date"
+                                                        id="editEndDate"
+                                                        value={editEndDate}
+                                                        onChange={(e) => setEditEndDate(e.target.value)}
+                                                        className="input-field w-full"
+                                                        required
+                                                    />
+                                                </div>
+
+                                                <div>
+                                                    <label htmlFor="editReason" className="block text-sm font-semibold text-gray-700 mb-2">
+                                                        Reason (Optional)
+                                                    </label>
+                                                    <textarea
+                                                        id="editReason"
+                                                        value={editReason}
+                                                        onChange={(e) => setEditReason(e.target.value)}
+                                                        placeholder="Tell us why you need this leave..."
+                                                        rows="3"
+                                                        className="input-field w-full sm:col-span-2"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {editStartDate && editEndDate && (
+                                                <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                                    <p className="text-sm text-gray-700">
+                                                        <strong>Updated Duration:</strong> {Math.ceil((new Date(editEndDate).getTime() - new Date(editStartDate).getTime()) / (1000 * 60 * 60 * 24)) + 1} days
+                                                    </p>
+                                                </div>
+                                            )}
+
+                                            <div className="mt-8 flex space-x-4">
+                                                <button
+                                                    type="submit"
+                                                    className="btn-primary shadow hover:shadow-lg"
+                                                >
+                                                    💾 Update Leave
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleCancelEdit}
+                                                    className="btn-secondary shadow hover:shadow-lg"
+                                                >
+                                                    ❌ Cancel Edit
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Leave History */}
+                            <div className="card">
+                                <div className="card-header bg-gradient-to-r from-pink-50 to-red-50 border-b">
+                                    <h3 className="text-lg font-semibold">Leave History</h3>
+                                    <p className="text-sm text-gray-600 mt-1">Total requests: {filteredLeaves.length}</p>
+                                </div>
+                                <div className="card-body">
+                                    <div className="mb-6 flex space-x-2 flex-wrap gap-2">
+                                        {['all', 'Pending', 'Approved', 'Rejected'].map(status => (
+                                            <button
+                                                key={status}
+                                                onClick={() => setLeaveFilter(status === 'all' ? 'all' : status)}
+                                                className={`px-4 py-2 rounded text-sm font-medium transition ${leaveFilter === (status === 'all' ? 'all' : status)
+                                                    ? 'bg-indigo-600 text-white shadow-lg'
+                                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                                    }`}
+                                            >
+                                                {status}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {filteredLeaves.length > 0 ? (
+                                        <div className="space-y-4 overflow-x-auto">
+                                            {filteredLeaves.map(leave => (
+                                                <div key={leave._id} className="border rounded-lg p-4 hover:shadow-lg transition bg-white hover:bg-gray-50">
+                                                    <div className="flex justify-between items-start flex-wrap gap-3">
+                                                        <div className="flex-1">
+                                                            <div className="flex items-center space-x-2 flex-wrap gap-2 mb-2">
+                                                                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                                                                    {leave.leaveType}
+                                                                </span>
+                                                                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${leave.status === 'Pending'
+                                                                    ? 'bg-yellow-100 text-yellow-800'
+                                                                    : leave.status === 'Approved'
+                                                                        ? 'bg-green-100 text-green-800'
+                                                                        : 'bg-red-100 text-red-800'
+                                                                    }`}>
+                                                                    {leave.status}
+                                                                </span>
+                                                            </div>
+                                                            <p className="text-sm text-gray-600 mb-2">
+                                                                📅 {new Date(leave.startDate).toLocaleDateString()} to {new Date(leave.endDate).toLocaleDateString()}
+                                                            </p>
+                                                            <p className="text-sm font-semibold text-gray-700 mb-2">Duration: {leave.totalDays} days</p>
+                                                            {leave.reason && <p className="text-sm text-gray-600">📝 Reason: {leave.reason}</p>}
+                                                            <p className="text-xs text-gray-500 mt-2">Applied: {new Date(leave.appliedDate).toLocaleDateString()}</p>
+                                                        </div>
+
+                                                        {/* Action Buttons for Pending Leaves */}
+                                                        {leave.status === 'Pending' && (
+                                                            <div className="flex space-x-2 flex-shrink-0">
+                                                                <button
+                                                                    onClick={() => handleEditLeave(leave)}
+                                                                    className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded text-sm font-semibold transition shadow hover:shadow-lg"
+                                                                    disabled={editingLeave !== null}
+                                                                >
+                                                                    ✏️ Edit
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleCancelLeave(leave._id)}
+                                                                    className="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded text-sm font-semibold transition shadow hover:shadow-lg"
+                                                                >
+                                                                    🗑️ Cancel
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-center text-gray-500 py-8">No leave requests found</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Attendance Tab */}
+                    {activeTab === 'attendance' && (
+                        <div className="card">
+                            <div className="card-header bg-gradient-to-r from-purple-50 to-pink-50 border-b">
+                                <h3 className="text-lg font-semibold">Attendance History</h3>
+                                <p className="text-sm text-gray-600 mt-1">Total records: {attendances.length} | Present: {presentDays}</p>
+                            </div>
+                            <div className="card-body">
+                                {attendances.length > 0 ? (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full">
+                                            <thead className="bg-gray-50 border-b">
+                                                <tr>
+                                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Date</th>
+                                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Status</th>
+                                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Day</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y">
+                                                {attendances.map(att => {
+                                                    const attDate = new Date(att.date);
+                                                    const dayName = attDate.toLocaleDateString('en-US', { weekday: 'long' });
+                                                    return (
+                                                        <tr key={att._id} className="hover:bg-gray-50 transition">
+                                                            <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                                                                {attDate.toLocaleDateString()}
+                                                            </td>
+                                                            <td className="px-6 py-4 text-sm">
+                                                                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${att.status === 'Present'
+                                                                    ? 'bg-green-100 text-green-800'
+                                                                    : 'bg-red-100 text-red-800'
+                                                                    }`}>
+                                                                    {att.status}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-6 py-4 text-sm text-gray-600">{dayName}</td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <p className="text-center text-gray-500 py-8">No attendance records found</p>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Apply Leave Tab */}
+                    {activeTab === 'apply' && (
+                        <div className="card">
+                            <div className="card-header bg-gradient-to-r from-blue-50 to-indigo-50 border-b">
+                                <h3 className="text-lg font-semibold">Apply for Leave</h3>
+                                <p className="text-sm text-gray-600 mt-1">Available balance: {leaveBalance} days</p>
+                            </div>
+                            <div className="card-body">
+                                <form onSubmit={handleApplyLeave} className="max-w-2xl">
+                                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                                        <div>
+                                            <label htmlFor="leaveType" className="block text-sm font-semibold text-gray-700 mb-2">
+                                                Leave Type <span className="text-red-500">*</span>
+                                            </label>
+                                            <select
+                                                id="leaveType"
+                                                value={leaveType}
+                                                onChange={(e) => setLeaveType(e.target.value)}
+                                                className="input-field w-full"
+                                            >
+                                                <option value="Casual">Casual Leave</option>
+                                                <option value="Sick">Sick Leave</option>
+                                                <option value="Paid">Paid Leave</option>
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label htmlFor="startDate" className="block text-sm font-semibold text-gray-700 mb-2">
+                                                Start Date <span className="text-red-500">*</span>
+                                            </label>
+                                            <input
+                                                type="date"
+                                                id="startDate"
+                                                value={startDate}
+                                                onChange={(e) => setStartDate(e.target.value)}
+                                                className="input-field w-full"
+                                                required
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label htmlFor="endDate" className="block text-sm font-semibold text-gray-700 mb-2">
+                                                End Date <span className="text-red-500">*</span>
+                                            </label>
+                                            <input
+                                                type="date"
+                                                id="endDate"
+                                                value={endDate}
+                                                onChange={(e) => setEndDate(e.target.value)}
+                                                className="input-field w-full"
+                                                required
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label htmlFor="reason" className="block text-sm font-semibold text-gray-700 mb-2">
+                                                Reason (Optional)
+                                            </label>
+                                            <textarea
+                                                id="reason"
+                                                value={reason}
+                                                onChange={(e) => setReason(e.target.value)}
+                                                placeholder="Tell us why you need this leave..."
+                                                rows="3"
+                                                className="input-field w-full sm:col-span-2"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {startDate && endDate && (
+                                        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                            <p className="text-sm text-gray-700">
+                                                <strong>Leave Duration:</strong> {Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1} days
+                                            </p>
+                                            <p className={`text-sm mt-2 ${Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1 > leaveBalance ? 'text-red-600 font-semibold' : 'text-green-600'}`}>
+                                                {Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1 > leaveBalance
+                                                    ? `⚠️ You need ${Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1 - leaveBalance} more days. Current balance: ${leaveBalance} days`
+                                                    : `✓ Remaining balance: ${leaveBalance - (Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1)} days`
+                                                }
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    <div className="mt-8 flex space-x-4">
+                                        <button
+                                            type="submit"
+                                            className="btn-primary shadow hover:shadow-lg"
+                                        >
+                                            🎯 Submit Leave Request
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setStartDate('');
+                                                setEndDate('');
+                                                setReason('');
+                                                setLeaveType('Casual');
+                                            }}
+                                            className="btn-secondary shadow hover:shadow-lg"
+                                        >
+                                            Clear Form
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </main>
+        </div>
+    );
+};
+
+export default EmployeeDashboard;

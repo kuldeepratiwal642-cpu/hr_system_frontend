@@ -1,0 +1,163 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles for better UI */
+@layer base {
+  body {
+    @apply text-gray-900;
+    background: linear-gradient(120deg, #eef2ff, #ecfeff 35%, #f0fdf4 70%, #fef9c3);
+    background-attachment: fixed;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-offset-2 transition duration-200;
+    background: linear-gradient(135deg, #6366f1, #22c55e);
+    background-size: 160% 160%;
+    animation: gradient-shift 5s ease infinite;
+    box-shadow: 0 12px 30px -14px rgba(79, 70, 229, 0.6);
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 14px 36px -16px rgba(34, 197, 94, 0.55);
+  }
+
+  .btn-secondary {
+    @apply bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition duration-200;
+  }
+
+  .input-field {
+    @apply mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500;
+  }
+
+  .card {
+    @apply bg-white overflow-hidden shadow rounded-lg;
+  }
+
+  .card-header {
+    @apply px-4 py-5 sm:px-6 bg-gray-50 border-b border-gray-200;
+  }
+
+  .card-body {
+    @apply px-4 py-5 sm:p-6;
+  }
+
+  /* Status Badges */
+  .badge-pending {
+    @apply inline-block bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-semibold;
+  }
+
+  .badge-approved {
+    @apply inline-block bg-green-100 text-green-800 px-3 py-1 rounded-full text-xs font-semibold;
+  }
+
+  .badge-rejected {
+    @apply inline-block bg-red-100 text-red-800 px-3 py-1 rounded-full text-xs font-semibold;
+  }
+
+  /* Tab Styles */
+  .tab-active {
+    @apply border-b-2 border-indigo-500 text-indigo-600 font-medium;
+  }
+
+  .tab-inactive {
+    @apply border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium cursor-pointer transition;
+  }
+
+  /* Filter Button Styles */
+  .filter-btn-active {
+    @apply bg-indigo-600 text-white shadow-lg;
+  }
+
+  .filter-btn-inactive {
+    @apply bg-gray-200 text-gray-700 hover:bg-gray-300 transition;
+  }
+
+  /* Table Row Hover */
+  .table-row-hover {
+    @apply hover:bg-gray-50 transition;
+  }
+
+  /* Motion helpers */
+  .animate-fade-up {
+    opacity: 0;
+    animation: fade-up 0.55s ease-out forwards;
+  }
+
+  .animate-stagger-1 { animation-delay: 80ms; }
+  .animate-stagger-2 { animation-delay: 160ms; }
+  .animate-stagger-3 { animation-delay: 240ms; }
+  .animate-stagger-4 { animation-delay: 320ms; }
+
+  .hover-lift {
+    transition: transform 180ms ease, box-shadow 180ms ease;
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 30px -12px rgba(79, 70, 229, 0.35);
+  }
+
+  /* Glassy card */
+  .glass-card {
+    background: rgba(255, 255, 255, 0.78);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    box-shadow: 0 20px 45px -28px rgba(15, 23, 42, 0.35);
+  }
+
+  /* Login aurora background */
+  .aurora {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .aurora::before,
+  .aurora::after {
+    content: '';
+    position: absolute;
+    width: 380px;
+    height: 380px;
+    filter: blur(120px);
+    opacity: 0.55;
+    animation: float 9s ease-in-out infinite alternate;
+  }
+
+  .aurora::before {
+    background: radial-gradient(circle at 30% 30%, #6366f1, transparent 50%);
+    top: -120px;
+    left: -80px;
+  }
+
+  .aurora::after {
+    background: radial-gradient(circle at 70% 70%, #14b8a6, transparent 50%);
+    bottom: -120px;
+    right: -60px;
+    animation-delay: 1.5s;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes float {
+    from { transform: translateY(0px) scale(1); }
+    to { transform: translateY(-18px) scale(1.03); }
+  }
+
+  @keyframes gradient-shift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+}
