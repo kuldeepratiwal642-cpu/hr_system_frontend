@@ -3,8 +3,8 @@ import { getToken } from './helper';
 
 // Create axios instance
 const api = axios.create({
-  baseURL: 'hrsystem-production-afec.up.railway.app/api',
-  timeout: 10000, // 10s timeout
+  baseURL: 'https://hrsystem-production-afec.up.railway.app/api', // backend URl
+  timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
   },
